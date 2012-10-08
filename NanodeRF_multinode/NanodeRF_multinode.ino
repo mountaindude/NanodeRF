@@ -25,7 +25,16 @@
   Other files in project directory (should appear in the arduino tabs above)
 	- decode_reply.ino
 	- dhcp_dns.ino
-*/
+
+
+  NOTE: Due to the fact that the Ethernet library use a lot of RAM, this sketch cannot handle a Jeelib RF12 package of maximum size, as described
+  here: http://jeelabs.org/2011/06/09/rf12-packet-format-and-design/
+  This will show itself as the last few characters of the POST URL being garbage. If this happens you have a couple of options: 
+  1) Send less data from the tx node
+  2) Re-write the sketch to use less RAM. Ideas for achieving this include storing all strings in flash (this has been tried and some improvement 
+     was noticed, it was however still not possible to receive a full RF12 package).
+  
+  */
 
 #define UNO       //anti crash wachdog reset only works with Uno (optiboot) bootloader, comment out the line if using delianuova
 
@@ -33,8 +42,8 @@
 #include <avr/wdt.h>
 
 #define MYNODE 15            
-#define freq RF12_433MHZ     // frequency
-#define group 210            // network group
+#define freq RF12_868MHZ     // frequency
+#define group 212            // network group
 
 //---------------------------------------------------------------------
 // The PacketBuffer class is used to generate the json string that is send via ethernet - JeeLabs
@@ -68,19 +77,19 @@ PacketBuffer str;
 static byte mymac[] = { 0x42,0x31,0x42,0x21,0x30,0x31 };
 
 // 1) Set this to the domain name of your hosted emoncms - leave blank if posting to IP address 
-char website[] PROGMEM = "emoncms.org";
+char website[] PROGMEM = "";
 
 // or if your posting to a static IP server:
 static byte hisip[] = { 192,168,1,10 };
 
 // change to true if you would like the sketch to use hisip
-boolean use_hisip = false;  
+boolean use_hisip = true;  
 
 // 2) If your emoncms install is in a subdirectory add details here i.e "/emoncms3"
-char basedir[] = "";
+char basedir[] = "/emoncms3";
 
 // 3) Set to your account write apikey 
-char apikey[] = "YOURAPIKEY";
+char apikey[] = "659d559f475e29d4fb2e309724b85271";
 
 //IP address of remote sever, only needed when posting to a server that has not got a dns domain name (staticIP e.g local server) 
 byte Ethernet::buffer[700];
@@ -110,9 +119,9 @@ void setup () {
   
   //Nanode RF LED indictor  setup - green flashing means good - red on for a long time means bad! 
   //High means off since NanodeRF tri-state buffer inverts signal 
-  pinMode(redLED, OUTPUT); digitalWrite(redLED,LOW);            
-  pinMode(greenLED, OUTPUT); digitalWrite(greenLED,LOW);       
-  delay(100); digitalWrite(redLED,HIGH);                          // turn off redLED
+//  pinMode(redLED, OUTPUT); digitalWrite(redLED,LOW);            
+//  pinMode(greenLED, OUTPUT); digitalWrite(greenLED,LOW);       
+//  delay(100); digitalWrite(redLED,HIGH);                          // turn off redLED
   
   Serial.begin(9600);
   Serial.println("\n[webClient]");
@@ -136,7 +145,7 @@ void setup () {
   rf12_initialize(MYNODE, freq,group);
   last_rf = millis()-40000;                                       // setting lastRF back 40s is useful as it forces the ethernet code to run straight away
    
-  digitalWrite(greenLED,HIGH);                                    // Green LED off - indicate that setup has finished 
+ // digitalWrite(greenLED,HIGH);                                    // Green LED off - indicate that setup has finished 
  
   #ifdef UNO
   wdt_enable(WDTO_8S); 
@@ -155,8 +164,9 @@ void loop () {
   dhcp_dns();   // handle dhcp and dns setup - see dhcp_dns tab
   
   // Display error states on status LED
-  if (ethernet_error==1 || rf_error==1 || ethernet_requests > 0) digitalWrite(redLED,LOW);
-    else digitalWrite(redLED,HIGH);
+//  if (ethernet_error==1 || rf_error==1 || ethernet_requests > 0) digitalWrite(redLED,LOW);
+//    else digitalWrite(redLED,HIGH);
+//  if (ethernet_error==1 || rf_error==1 || ethernet_requests > 0) Serial.print(".");
 
   //-----------------------------------------------------------------------------------------------------------------
   // 1) On RF recieve
@@ -166,6 +176,7 @@ void loop () {
       {
         int node_id = (rf12_hdr & 0x1F);
         byte n = rf12_len;
+        Serial.println(n);
          
         str.reset();
         str.print(basedir); str.print("/api/post.json?");
@@ -174,7 +185,9 @@ void loop () {
         str.print("&csv=");
         for (byte i=0; i<n; i+=2)
         {
+          Serial.print(i); Serial.print(" "); Serial.print(rf12_data[i], DEC); Serial.print(" "); Serial.println(rf12_data[i+1], DEC);
           int num = ((unsigned char)rf12_data[i+1] << 8 | (unsigned char)rf12_data[i]);
+//          unsigned int num = ((unsigned char)rf12_data[i+1] << 8 | (unsigned char)rf12_data[i]);
           if (i) str.print(",");
           str.print(num);
         }
